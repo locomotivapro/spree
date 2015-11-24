@@ -57,11 +57,13 @@ module Spree
     @@product_properties_attributes = [:property_name, :value, :position]
 
     @@product_attributes = [
-      :name, :description, :available_on, :permalink, :meta_description,
+      :name, :description, :available_on, :discontinue_on, :permalink, :meta_description,
       :meta_keywords, :price, :sku, :deleted_at, :prototype_id,
       :option_values_hash, :weight, :height, :width, :depth,
       :shipping_category_id, :tax_category_id,
-      :taxon_ids, :option_type_ids, :cost_currency, :cost_price]
+      :cost_currency, :cost_price,
+      option_type_ids: [], taxon_ids: []
+    ]
 
     @@property_attributes = [:name, :presentation]
 
@@ -100,9 +102,11 @@ module Spree
     @@user_attributes = [:email, :password, :password_confirmation]
 
     @@variant_attributes = [
-      :name, :presentation, :cost_price, :lock_version,
-      :position, :option_value_ids, :track_inventory,
+      :name, :presentation, :cost_price, :discontinue_on, :lock_version,
+      :position, :track_inventory,
       :product_id, :product, :option_values_attributes, :price,
-      :weight, :height, :width, :depth, :sku, :cost_currency, options: [ :name, :value ]]
+      :weight, :height, :width, :depth, :sku, :cost_currency,
+      options: [:name, :value], option_value_ids: []
+    ]
   end
 end

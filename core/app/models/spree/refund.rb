@@ -1,16 +1,19 @@
 module Spree
   class Refund < Spree::Base
-    belongs_to :payment, inverse_of: :refunds
+    with_options inverse_of: :refunds do
+      belongs_to :payment
+      belongs_to :reimbursement
+    end
     belongs_to :reason, class_name: 'Spree::RefundReason', foreign_key: :refund_reason_id
-    belongs_to :reimbursement, inverse_of: :refunds
 
     has_many :log_entries, as: :source
 
-    validates :payment, presence: true
-    validates :reason, presence: true
-    validates :transaction_id, presence: true, on: :update # can't require this on create because the before_create needs to run first
-    validates :amount, presence: true, numericality: {greater_than: 0}
-
+    with_options presence: true do
+      validates :payment, :reason
+      # can't require this on create because the perform! in after_create needs to run first
+      validates :transaction_id, on: :update
+      validates :amount, numericality: { greater_than: 0 }
+    end
     validate :amount_is_less_than_or_equal_to_allowed_amount, on: :create
 
     after_create :perform!
@@ -46,6 +49,7 @@ module Spree
 
       self.transaction_id = @response.authorization
       update_columns(transaction_id: transaction_id)
+      update_order
     end
 
     # return an activemerchant response object if successful or else raise an error
@@ -76,6 +80,10 @@ module Spree
       if amount > payment.credit_allowed
         errors.add(:amount, :greater_than_allowed)
       end
+    end
+
+    def update_order
+      payment.order.updater.update
     end
   end
 end

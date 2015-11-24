@@ -45,7 +45,7 @@ module Spree
 
     def line_item_description_text description_text
       if description_text.present?
-        truncate(strip_tags(description_text.gsub('&nbsp;', ' ')), length: 100)
+        truncate(strip_tags(description_text.gsub('&nbsp;', ' ').squish), length: 100)
       else
         Spree.t(:product_has_no_description)
       end
@@ -54,7 +54,37 @@ module Spree
     def cache_key_for_products
       count = @products.count
       max_updated_at = (@products.maximum(:updated_at) || Date.today).to_s(:number)
-      "#{I18n.locale}/#{current_currency}/spree/products/all-#{params[:page]}-#{max_updated_at}-#{count}"
+      products_cache_keys = "spree/products/all-#{params[:page]}-#{max_updated_at}-#{count}"
+      (common_product_cache_keys + [products_cache_keys]).compact.join("/")
+    end
+
+    def cache_key_for_product(product = @product)
+      (common_product_cache_keys + [product.cache_key, product.possible_promotions]).compact.join("/")
+    end
+
+    def available_status(product) # will return a human readable string
+      return Spree.t(:discontinued)  if product.discontinued?
+      return Spree.t(:deleted)  if product.deleted?
+
+      if product.available?
+        Spree.t(:available)
+      elsif product.available_on && product.available_on.future?
+        Spree.t(:pending_sale)
+      else
+        Spree.t(:no_available_date_set)
+      end
+    end
+
+    private
+
+    def common_product_cache_keys
+      [I18n.locale, current_currency] + price_options_cache_key
+    end
+
+    def price_options_cache_key
+      current_price_options.sort.map(&:last).map do |value|
+        value.try(:cache_key) || value
+      end
     end
   end
 end

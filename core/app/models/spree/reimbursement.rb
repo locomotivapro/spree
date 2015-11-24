@@ -1,21 +1,24 @@
 module Spree
   class Reimbursement < Spree::Base
+    include Spree::Core::NumberGenerator.new(prefix: 'RI', length: 9)
+
     class IncompleteReimbursementError < StandardError; end
 
-    belongs_to :order, inverse_of: :reimbursements
-    belongs_to :customer_return, inverse_of: :reimbursements, touch: true
+    with_options inverse_of: :reimbursements do
+      belongs_to :order
+      belongs_to :customer_return, touch: true
+    end
 
-    has_many :refunds, inverse_of: :reimbursement
-    has_many :credits, inverse_of: :reimbursement, class_name: 'Spree::Reimbursement::Credit'
-
-    has_many :return_items, inverse_of: :reimbursement
+    with_options inverse_of: :reimbursement do
+      has_many :refunds
+      has_many :credits, class_name: 'Spree::Reimbursement::Credit'
+      has_many :return_items
+    end
 
     validates :order, presence: true
     validate :validate_return_items_belong_to_same_order
 
     accepts_nested_attributes_for :return_items, allow_destroy: true
-
-    before_create :generate_number
 
     scope :reimbursed, -> { where(reimbursement_status: 'reimbursed') }
 
@@ -26,7 +29,7 @@ module Spree
     class_attribute :reimbursement_tax_calculator
     self.reimbursement_tax_calculator = ReimbursementTaxCalculator
     # A separate attribute here allows you to use a more performant calculator for estimates
-    # and a different one (e.g. one that hits a 3rd party API) for the final caluclations.
+    # and a different one (e.g. one that hits a 3rd party API) for the final calculations.
     class_attribute :reimbursement_simulator_tax_calculator
     self.reimbursement_simulator_tax_calculator = ReimbursementTaxCalculator
 
@@ -83,9 +86,9 @@ module Spree
     end
 
     def calculated_total
-      # rounding down to handle edge cases for consecutive partial returns where rounding
-      # might cause us to try to reimburse more than was originally billed
-      return_items.to_a.sum(&:total).to_d.round(2, :down)
+      # rounding every return item individually to handle edge cases for consecutive partial
+      # returns where rounding might cause us to try to reimburse more than was originally billed
+      return_items.map { |ri| ri.total.to_d.round(2) }.sum
     end
 
     def paid_amount
@@ -130,13 +133,6 @@ module Spree
 
     private
 
-    def generate_number
-      self.number ||= loop do
-        random = "RI#{Array.new(9){rand(9)}.join}"
-        break random unless self.class.exists?(number: random)
-      end
-    end
-
     def validate_return_items_belong_to_same_order
       if return_items.any? { |ri| ri.inventory_unit.order_id != order_id }
         errors.add(:base, :return_items_order_id_does_not_match)
@@ -154,7 +150,7 @@ module Spree
     # payments and credits have already been processed, we should allow the
     # reimbursement to show as 'reimbursed' and not 'errored'.
     def unpaid_amount_within_tolerance?
-      reimbursement_count = reimbursement_models.count do |model|
+      reimbursement_count = reimbursement_models.size do |model|
         model.total_amount_reimbursed_for(self) > 0
       end
       leniency = if reimbursement_count > 0

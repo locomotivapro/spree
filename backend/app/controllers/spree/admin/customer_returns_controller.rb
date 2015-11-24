@@ -10,10 +10,11 @@ module Spree
       create.fails  :load_form_data
 
       def edit
-        @pending_return_items = @customer_return.return_items.select(&:pending?)
-        @accepted_return_items = @customer_return.return_items.select(&:accepted?)
-        @rejected_return_items = @customer_return.return_items.select(&:rejected?)
-        @manual_intervention_return_items = @customer_return.return_items.select(&:manual_intervention_required?)
+        returned_items = @customer_return.return_items
+        @pending_return_items = returned_items.select(&:pending?)
+        @accepted_return_items = returned_items.select(&:accepted?)
+        @rejected_return_items = returned_items.select(&:rejected?)
+        @manual_intervention_return_items = returned_items.select(&:manual_intervention_required?)
         @pending_reimbursements = @customer_return.reimbursements.select(&:pending?)
 
         super
@@ -44,7 +45,7 @@ module Spree
 
       def load_form_data
         return_items = @order.inventory_units.map(&:current_or_new_return_item).reject(&:customer_return_id)
-        @rma_return_items, @new_return_items = return_items.partition(&:return_authorization_id)
+        @rma_return_items = return_items.select(&:return_authorization_id)
       end
 
       def permitted_resource_params

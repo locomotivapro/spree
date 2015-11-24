@@ -11,6 +11,7 @@ module Spree
         params[:q][:completed_at_not_null] ||= '1' if Spree::Config[:show_only_complete_orders_by_default]
         @show_only_completed = params[:q][:completed_at_not_null] == '1'
         params[:q][:s] ||= @show_only_completed ? 'completed_at desc' : 'created_at desc'
+        params[:q][:completed_at_not_null] = '' unless @show_only_completed
 
         # As date params are deleted if @show_only_completed, store
         # the original date so we can restore them into the params
@@ -80,7 +81,7 @@ module Spree
           @order.errors.add(:line_items, Spree.t('errors.messages.blank')) if @order.line_items.empty?
         end
 
-        render :action => :edit
+        render action: :edit
       end
 
       def cancel
@@ -109,7 +110,7 @@ module Spree
       end
 
       def open_adjustments
-        adjustments = @order.all_adjustments.where(state: 'closed')
+        adjustments = @order.all_adjustments.closed
         adjustments.update_all(state: 'open')
         flash[:success] = Spree.t(:all_adjustments_opened)
 
@@ -117,7 +118,7 @@ module Spree
       end
 
       def close_adjustments
-        adjustments = @order.all_adjustments.where(state: 'open')
+        adjustments = @order.all_adjustments.open
         adjustments.update_all(state: 'closed')
         flash[:success] = Spree.t(:all_adjustments_closed)
 
@@ -127,7 +128,7 @@ module Spree
       private
         def order_params
           params[:created_by_id] = try_spree_current_user.try(:id)
-          params.permit(:created_by_id)
+          params.permit(:created_by_id, :user_id)
         end
 
         def load_order

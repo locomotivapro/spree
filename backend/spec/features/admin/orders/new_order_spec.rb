@@ -10,6 +10,8 @@ describe "New Order", :type => :feature do
   stub_authorization!
 
   before do
+    # create default store
+    create(:store)
     visit spree.new_admin_order_path
   end
 
@@ -19,7 +21,7 @@ describe "New Order", :type => :feature do
     expect(current_path).to eql(spree.edit_admin_order_customer_path(Spree::Order.last))
   end
 
-  it "completes new order succesfully without using the cart", js: true do
+  it "completes new order successfully without using the cart", js: true do
     select2_search product.name, from: Spree.t(:name_or_sku)
     click_icon :add
     wait_for_ajax

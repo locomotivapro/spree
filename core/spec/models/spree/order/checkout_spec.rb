@@ -4,6 +4,8 @@ require 'spree/testing_support/order_walkthrough'
 describe Spree::Order, :type => :model do
   let(:order) { Spree::Order.new }
 
+  before { create(:store) }
+
   def assert_state_changed(order, from, to)
     state_change_exists = order.state_changes.where(:previous_state => from, :next_state => to).exists?
     assert state_change_exists, "Expected order to transition from #{from} to #{to}, but didn't."
@@ -39,8 +41,13 @@ describe Spree::Order, :type => :model do
 
     it '.remove_transition' do
       options = {:from => transitions.first.keys.first, :to => transitions.first.values.first}
-      allow(Spree::Order).to receive(:next_event_transition).and_return([options])
+      expect(Spree::Order).to receive_messages(
+        removed_transitions:    [],
+        next_event_transitions: transitions.dup
+      )
       expect(Spree::Order.remove_transition(options)).to be_truthy
+      expect(Spree::Order.removed_transitions).to eql([options])
+      expect(Spree::Order.next_event_transitions).to_not include(transitions.first)
     end
 
     it '.remove_transition when contract was broken' do
@@ -172,6 +179,7 @@ describe Spree::Order, :type => :model do
       it "updates totals" do
         allow(order).to receive_messages(:ensure_available_shipping_rates => true)
         line_item = FactoryGirl.create(:line_item, :price => 10, :adjustment_total => 10)
+        line_item.variant.update_attributes!(price: 10)
         order.line_items << line_item
         tax_rate = create(:tax_rate, :tax_category => line_item.tax_category, :amount => 0.05)
         allow(Spree::TaxRate).to receive_messages :match => [tax_rate]
@@ -182,6 +190,28 @@ describe Spree::Order, :type => :model do
         expect(order.additional_tax_total).to eq(0.5)
         expect(order.included_tax_total).to eq(0)
         expect(order.total).to eq(10.5)
+      end
+
+      it 'updates prices' do
+        allow(order).to receive_messages(ensure_available_shipping_rates: true)
+        line_item = FactoryGirl.create(:line_item, price: 10, adjustment_total: 10)
+        line_item.variant.update_attributes!(price: 20)
+        order.line_items << line_item
+        tax_rate = create :tax_rate,
+                          included_in_price: true,
+                          tax_category: line_item.tax_category,
+                          amount: 0.05
+        allow(Spree::TaxRate).to receive_messages(match: [tax_rate])
+        FactoryGirl.create :tax_adjustment,
+                           adjustable: line_item,
+                           source: tax_rate,
+                           order: order
+        order.email = "user@example.com"
+        order.next!
+        expect(order.adjustment_total).to eq(0)
+        expect(order.additional_tax_total).to eq(0)
+        expect(order.included_tax_total).to eq(0.95)
+        expect(order.total).to eq(20)
       end
 
       it "transitions to delivery" do
@@ -347,26 +377,6 @@ describe Spree::Order, :type => :model do
             expect(order.state).to eq("complete")
           end
         end
-      end
-    end
-
-    context "to payment" do
-      before do
-        @default_credit_card = FactoryGirl.create(:credit_card)
-        order.user = mock_model(Spree::LegacyUser, default_credit_card: @default_credit_card, email: 'spree@example.org')
-
-        allow(order).to receive_messages(payment_required?: true)
-        order.state = 'delivery'
-        order.save!
-      end
-
-      it "assigns the user's default credit card" do
-        order.next!
-        order.reload
-
-        expect(order.state).to eq 'payment'
-        expect(order.payments.count).to eq 1
-        expect(order.payments.first.source).to eq @default_credit_card
       end
     end
 
@@ -540,7 +550,7 @@ describe Spree::Order, :type => :model do
     it "does not attempt to process payments" do
       allow(order).to receive_message_chain(:line_items, :present?) { true }
       allow(order).to receive(:ensure_line_items_are_in_stock) { true }
-      allow(order).to receive(:ensure_line_item_variants_are_not_deleted) { true }
+      allow(order).to receive(:ensure_line_item_variants_are_not_discontinued) { true }
       expect(order).not_to receive(:payment_required?)
       expect(order).not_to receive(:process_payments!)
       order.next!
@@ -682,7 +692,7 @@ describe Spree::Order, :type => :model do
 
         expect {
           order.update_from_params(params, permitted_params)
-        }.to raise_error
+        }.to raise_error(Spree.t(:invalid_credit_card))
       end
     end
 
@@ -693,6 +703,34 @@ describe Spree::Order, :type => :model do
       it 'does not let through unpermitted attributes' do
         expect(order).to receive(:update_attributes).with({})
         order.update_from_params(params, permitted_params)
+      end
+
+      context 'has existing_card param' do
+        let(:permitted_params) do
+          Spree::PermittedAttributes.checkout_attributes +
+            [payments_attributes: Spree::PermittedAttributes.payment_attributes]
+        end
+        let(:credit_card) { create(:credit_card, user_id: order.user_id) }
+        let(:params) do
+          ActionController::Parameters.new(
+            order: { payments_attributes: [{payment_method_id: 1}], existing_card: credit_card.id }
+          )
+        end
+
+        before do
+          Dummy::Application.config.action_controller.action_on_unpermitted_parameters = :raise
+          order.user_id = 3
+        end
+
+        after do
+          Dummy::Application.config.action_controller.action_on_unpermitted_parameters = :log
+        end
+
+        it 'does not attempt to permit existing_card' do
+          expect {
+            order.update_from_params(params, permitted_params)
+          }.not_to raise_error
+        end
       end
 
       context 'has allowed params' do

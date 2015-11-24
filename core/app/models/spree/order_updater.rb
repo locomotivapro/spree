@@ -110,7 +110,7 @@ module Spree
         shipment_total: order.shipment_total,
         promo_total: order.promo_total,
         total: order.total,
-        updated_at: Time.now,
+        updated_at: Time.current,
       )
     end
 
@@ -170,10 +170,5 @@ module Spree
       order.state_changed('payment') if last_state != order.payment_state
       order.payment_state
     end
-
-    private
-      def round_money(n)
-        (n * 100).round / 100.0
-      end
   end
 end

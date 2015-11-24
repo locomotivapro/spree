@@ -12,7 +12,7 @@ module Spree
     let(:attributes) do
       [:number, :item_total, :display_total, :total, :state, :adjustment_total, :user_id,
        :created_at, :updated_at, :completed_at, :payment_total, :shipment_state, :payment_state,
-       :email, :special_instructions, :total_quantity, :display_item_total, :currency]
+       :email, :special_instructions, :total_quantity, :display_item_total, :currency, :considered_risky]
     end
 
     let(:address_params) { { :country_id => Country.first.id, :state_id => State.first.id } }
@@ -65,9 +65,9 @@ module Spree
       end
 
       it "returns orders in reverse chronological order by completed_at" do
-        order.update_columns completed_at: Time.now
+        order.update_columns completed_at: Time.current
 
-        order2 = Order.create user: order.user, completed_at: Time.now - 1.day
+        order2 = Order.create user: order.user, completed_at: Time.current - 1.day
         expect(order2.created_at).to be > order.created_at
         order3 = Order.create user: order.user, completed_at: nil
         expect(order3.created_at).to be > order2.created_at
@@ -222,7 +222,7 @@ module Spree
     end
 
     it "cannot cancel an order that doesn't belong to them" do
-      order.update_attribute(:completed_at, Time.now)
+      order.update_attribute(:completed_at, Time.current)
       order.update_attribute(:shipment_state, "ready")
       api_put :cancel, :id => order.to_param
       assert_unauthorized!
@@ -291,7 +291,9 @@ module Spree
     it "does not update line item needlessly" do
       expect(Order).to receive(:create!).and_return(order = Spree::Order.new)
       allow(order).to receive(:associate_user!)
-      allow(order).to receive_message_chain(:contents, :add).and_return(line_item = double('LineItem'))
+      line_item = double('LineItem')
+      allow(line_item).to receive_messages(save!: line_item)
+      allow(order).to receive_message_chain(:contents, :add).and_return(line_item)
       expect(line_item).not_to receive(:update_attributes)
       api_post :create, order: { line_items: [{ variant_id: variant.to_param, quantity: 5 }] }
     end
@@ -694,9 +696,7 @@ module Spree
 
       context "can cancel an order" do
         before do
-          Spree::Config[:mails_from] = "spree@example.com"
-
-          order.completed_at = Time.now
+          order.completed_at = Time.current
           order.state = 'complete'
           order.shipment_state = 'ready'
           order.save!

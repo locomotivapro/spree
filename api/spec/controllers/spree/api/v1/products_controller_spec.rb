@@ -6,7 +6,7 @@ module Spree
     render_views
 
     let!(:product) { create(:product) }
-    let!(:inactive_product) { create(:product, available_on: Time.now.tomorrow, name: "inactive") }
+    let!(:inactive_product) { create(:product, available_on: Time.current.tomorrow, name: "inactive") }
     let(:base_attributes) { Api::ApiHelpers.product_attributes }
     let(:show_attributes) { base_attributes.dup.push(:has_variants) }
     let(:new_attributes) { base_attributes }
@@ -65,45 +65,6 @@ module Spree
         expect(json_response["current_page"]).to eq(1)
         expect(json_response["pages"]).to eq(1)
         expect(json_response["per_page"]).to eq(Kaminari.config.default_per_page)
-      end
-
-      context "specifying a rabl template for a custom action" do
-        before do
-          described_class.class_eval do
-            def custom_show
-              @product = find_product(params[:id])
-              respond_with(@product)
-            end
-          end
-        end
-
-        def set_custom_route
-          @routes = ActionDispatch::Routing::RouteSet.new.tap do |r|
-            r.draw { get 'custom_show' => 'spree/api/v1/products#custom_show' }
-          end
-        end
-
-        it "uses the specified custom template through the request header" do
-          set_custom_route
-
-          request.headers['X-Spree-Template'] = 'show'
-          api_get :custom_show, :id => product.id
-          expect(response).to render_template('spree/api/v1/products/show')
-        end
-
-        it "uses the specified custom template through the template URL parameter" do
-          set_custom_route
-
-          api_get :custom_show, :id => product.id, :template => 'show'
-          expect(response).to render_template('spree/api/v1/products/show')
-        end
-
-        it "falls back to the default template if the specified template does not exist" do
-          request.headers['X-Spree-Template'] = 'invoice'
-
-          api_get :show, :id => product.id
-          expect(response).to render_template('spree/api/v1/products/show')
-        end
       end
 
       context "product has more than one price" do
@@ -326,6 +287,13 @@ module Spree
           expect(json_response['option_types'].count).to eq(2)
         end
 
+        it "creates product with option_types ids" do
+          option_type = create(:option_type)
+          product_data.merge!(option_type_ids: [option_type.id])
+          api_post :create, product: product_data
+          expect(json_response['option_types'].first['id']).to eq option_type.id
+        end
+
         it "creates with shipping categories" do
           hash = { :name => "The Other Product",
                    :price => 19.99,
@@ -338,16 +306,9 @@ module Spree
           expect(json_response['shipping_category_id']).to eq shipping_id
         end
 
-        it "puts the created product in the given taxon" do
-          product_data[:taxon_ids] = taxon_1.id.to_s
-          api_post :create, :product => product_data
-          expect(json_response["taxon_ids"]).to eq([taxon_1.id,])
-        end
-
-        # Regression test for #4123
         it "puts the created product in the given taxons" do
-          product_data[:taxon_ids] = [taxon_1.id, taxon_2.id].join(',')
-          api_post :create, :product => product_data
+          product_data[:taxon_ids] = [taxon_1.id, taxon_2.id]
+          api_post :create, product: product_data
           expect(json_response["taxon_ids"]).to eq([taxon_1.id, taxon_2.id])
         end
 
@@ -431,16 +392,9 @@ module Spree
           expect(json_response["errors"]["name"]).to eq(["can't be blank"])
         end
 
-        # Regression test for #4123
-        it "puts the created product in the given taxon" do
-          api_put :update, :id => product.to_param, :product => {:taxon_ids => taxon_1.id.to_s}
-          expect(json_response["taxon_ids"]).to eq([taxon_1.id,])
-        end
-
-        # Regression test for #4123
-        it "puts the created product in the given taxons" do
-          api_put :update, :id => product.to_param, :product => {:taxon_ids => [taxon_1.id, taxon_2.id].join(',')}
-          expect(json_response["taxon_ids"]).to eq([taxon_1.id, taxon_2.id])
+        it "puts the updated product in the given taxons" do
+          api_put :update, id: product.to_param, product: { taxon_ids: [taxon_1.id, taxon_2.id] }
+          expect(json_response["taxon_ids"].to_set).to eql([taxon_1.id, taxon_2.id].to_set)
         end
       end
 

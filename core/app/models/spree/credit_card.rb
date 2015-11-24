@@ -8,21 +8,34 @@ module Spree
 
     after_save :ensure_one_default
 
+    # As of rails 4.2 string columns always return strings, we can override it on model level.
+    attribute :month, Type::Integer.new
+    attribute :year,  Type::Integer.new
+
+    attr_reader :number
     attr_accessor :encrypted_data,
-                    :number,
                     :imported,
                     :verification_value
 
-    validates :month, :year, numericality: { only_integer: true }, if: :require_card_numbers?, on: :create
-    validates :number, presence: true, if: :require_card_numbers?, on: :create, unless: :imported
-    validates :name, presence: true, if: :require_card_numbers?, on: :create
-    validates :verification_value, presence: true, if: :require_card_numbers?, on: :create, unless: :imported
+    with_options if: :require_card_numbers?, on: :create do
+      validates :month, :year, numericality: { only_integer: true }
+      validates :number, :verification_value, presence: true, unless: :imported
+      validates :name, presence: true
+    end
 
     scope :with_payment_profile, -> { where('gateway_customer_profile_id IS NOT NULL') }
     scope :default, -> { where(default: true) }
 
     # needed for some of the ActiveMerchant gateways (eg. SagePay)
     alias_attribute :brand, :cc_type
+
+    # ActiveMerchant::Billing::CreditCard added this accessor used by some gateways.
+    # More info: https://github.com/spree/spree/issues/6209
+    #
+    # Returns or sets the track data for the card
+    #
+    # @return [String]
+    attr_accessor :track_data
 
     CARD_TYPES = {
       visa: /^4[0-9]{12}(?:[0-9]{3})?$/,
@@ -32,20 +45,6 @@ module Spree
       discover: /^6(?:011|5[0-9]{2})[0-9]{12}$/,
       jcb: /^(?:2131|1800|35\d{3})\d{11}$/
     }
-
-    # As of rails 4.2 string columns always return strings, perhaps we should
-    # change these to integer columns on db level
-    def month
-      if type_casted = super
-        type_casted.to_i
-      end
-    end
-
-    def year
-      if type_casted = super
-        type_casted.to_i
-      end
-    end
 
     def expiry=(expiry)
       return unless expiry.present?
@@ -57,7 +56,7 @@ module Spree
         [match[1], match[2]]
       end
       if self[:year]
-        self[:year] = "20" + self[:year] if self[:year].length == 2
+        self[:year] = "20#{ self[:year] }" if self[:year] / 100 == 0
         self[:year] = self[:year].to_i
       end
       self[:month] = self[:month].to_i if self[:month]
@@ -136,12 +135,12 @@ module Spree
 
     def to_active_merchant
       ActiveMerchant::Billing::CreditCard.new(
-        :number => number,
-        :month => month,
-        :year => year,
-        :verification_value => verification_value,
-        :first_name => first_name,
-        :last_name => last_name,
+        number: number,
+        month: month,
+        year: year,
+        verification_value: verification_value,
+        first_name: first_name,
+        last_name: last_name,
       )
     end
 

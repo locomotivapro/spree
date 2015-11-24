@@ -38,9 +38,9 @@ describe Spree::Api::V1::ShipmentsController, :type => :controller do
           shipment: { order_id: order.number },
           stock_location_id: stock_location.to_param
         }
-      end 
-      
-      subject do 
+      end
+
+      subject do
         api_post :create, params
       end
 
@@ -122,9 +122,6 @@ describe Spree::Api::V1::ShipmentsController, :type => :controller do
     context "can transition a shipment from ready to ship" do
       before do
         allow_any_instance_of(Spree::Order).to receive_messages(:paid? => true, :complete? => true)
-        # For the shipment notification email
-        Spree::Config[:mails_from] = "spree@example.com"
-
         shipment.update!(shipment.order)
         expect(shipment.state).to eq("ready")
         allow_any_instance_of(Spree::ShippingRate).to receive_messages(:cost => 5)

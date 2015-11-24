@@ -118,7 +118,7 @@ LineEndConcatenation:
   Enabled: false
 
 LineLength:
-  Max: 100
+  Max: 120
 
 MethodLength:
   Enabled: false
@@ -257,3 +257,9 @@ UnderscorePrefixedVariableName:
 
 Void:
   Enabled: false
+
+# Style
+
+Style/IndentationWidth:
+  # Number of spaces for each indentation level.
+  Width: 2

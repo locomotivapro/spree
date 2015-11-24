@@ -4,10 +4,11 @@ module Spree
   describe Api::V1::VariantsController, :type => :controller do
     render_views
 
+    let(:option_value) { create(:option_value) }
     let!(:product) { create(:product) }
     let!(:variant) do
       variant = product.master
-      variant.option_values << create(:option_value)
+      variant.option_values << option_value
       variant
     end
 
@@ -78,7 +79,7 @@ module Spree
     # Regression test for #2141
     context "a deleted variant" do
       before do
-        variant.update_column(:deleted_at, Time.now)
+        variant.update_column(:deleted_at, Time.current)
       end
 
       it "is not returned in the results" do
@@ -156,7 +157,7 @@ module Spree
       # Test for #2141
       context "deleted variants" do
         before do
-          variant.update_column(:deleted_at, Time.now)
+          variant.update_column(:deleted_at, Time.current)
         end
 
         it "are visible by admin" do
@@ -166,10 +167,20 @@ module Spree
       end
 
       it "can create a new variant" do
-        api_post :create, :variant => { :sku => "12345" }
+        other_value = create(:option_value)
+        api_post :create, variant: {
+          sku: "12345",
+          price: "20",
+          option_value_ids: [option_value.id, other_value.id]
+        }
+
         expect(json_response).to have_attributes(new_attributes)
         expect(response.status).to eq(201)
         expect(json_response["sku"]).to eq("12345")
+        expect(json_response["price"]).to match "20"
+
+        option_value_ids = json_response["option_values"].map { |o| o['id'] }
+        expect(option_value_ids).to match_array [option_value.id, other_value.id]
 
         expect(variant.product.variants.count).to eq(1)
       end

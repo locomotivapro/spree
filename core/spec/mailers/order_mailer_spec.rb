@@ -5,6 +5,8 @@ describe Spree::OrderMailer, :type => :mailer do
   include EmailSpec::Helpers
   include EmailSpec::Matchers
 
+  before { create(:store) }
+
   let(:order) do
     order = stub_model(Spree::Order)
     product = stub_model(Spree::Product, :name => %Q{The "BEST" product})
@@ -19,7 +21,7 @@ describe Spree::OrderMailer, :type => :mailer do
   context ":from not set explicitly" do
     it "falls back to spree config" do
       message = Spree::OrderMailer.confirm_email(order)
-      expect(message.from).to eq([Spree::Config[:mails_from]])
+      expect(message.from).to eq([Spree::Store.current.mail_from_address])
     end
   end
 

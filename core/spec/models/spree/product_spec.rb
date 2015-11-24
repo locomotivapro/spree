@@ -29,14 +29,10 @@ describe Spree::Product, :type => :model do
       end
 
       it 'calls #duplicate_extra' do
-        Spree::Product.class_eval do
-          def duplicate_extra(old_product)
-            self.name = old_product.name.reverse
-          end
-        end
-
-        clone = product.duplicate
-        expect(clone.name).to eq(product.name.reverse)
+        expect_any_instance_of(Spree::Product).to receive(:duplicate_extra)
+          .with(product)
+        expect(product).to_not receive(:duplicate_extra)
+        product.duplicate
       end
     end
 
@@ -164,15 +160,17 @@ describe Spree::Product, :type => :model do
     end
 
     describe 'Variants sorting' do
+      ORDER_REGEXP = /ORDER BY (\`|\")spree_variants(\`|\").(\'|\")position(\'|\") ASC/
+
       context 'without master variant' do
         it 'sorts variants by position' do
-          expect(product.variants.to_sql).to match(/ORDER BY (\`|\")spree_variants(\`|\").position ASC/)
+          expect(product.variants.to_sql).to match(ORDER_REGEXP)
         end
       end
 
       context 'with master variant' do
         it 'sorts variants by position' do
-          expect(product.variants_including_master.to_sql).to match(/ORDER BY (\`|\")spree_variants(\`|\").position ASC/)
+          expect(product.variants_including_master.to_sql).to match(ORDER_REGEXP)
         end
       end
     end
@@ -203,10 +201,26 @@ describe Spree::Product, :type => :model do
         expect(product.slug).not_to match "/"
       end
 
-      it "renames slug on destroy" do
-        old_slug = product.slug
-        product.destroy
-        expect(old_slug).to_not eq product.slug
+      context "when product destroyed" do
+
+        it "renames slug" do
+          expect { product.destroy }.to change { product.slug }
+        end
+
+        context "when slug is already at or near max length" do
+
+          before do
+            product.slug = "x" * 255
+            product.save!
+          end
+
+          it "truncates renamed slug to ensure it remains within length limit" do
+            product.destroy
+            expect(product.slug.length).to eq 255
+          end
+
+        end
+
       end
 
       it "validates slug uniqueness" do
@@ -230,12 +244,32 @@ describe Spree::Product, :type => :model do
 
         expect(product2.slug).to eq 'test-456'
       end
-
     end
 
     context "hard deletion" do
       it "doesnt raise ActiveRecordError error" do
         expect { product.really_destroy! }.to_not raise_error
+      end
+    end
+
+    context 'history' do
+      before(:each) do
+        @product = create(:product)
+      end
+
+      it 'should keep the history when the product is destroyed' do
+        @product.destroy
+
+        expect(@product.slugs.with_deleted).to_not be_empty
+      end
+
+      it 'should update the history when the product is restored' do
+        @product.destroy
+
+        @product.restore(recursive: true)
+
+        latest_slug = @product.slugs.find_by slug: @product.slug
+        expect(latest_slug).to_not be_nil
       end
     end
   end
@@ -264,6 +298,22 @@ describe Spree::Product, :type => :model do
         product.reload
         expect(product.property('the_prop_new')).to eq('value')
       }.to change { product.properties.length }.by(1)
+    end
+
+    context 'optional property_presentation' do
+      subject { Spree::Property.where(name: 'foo').first.presentation }
+      let(:name) { 'foo' }
+      let(:presentation) { 'baz' }
+
+      describe 'is not used' do
+        before { product.set_property(name, 'bar') }
+        it { is_expected.to eq name }
+      end
+
+      describe 'is used' do
+        before { product.set_property(name, 'bar', presentation) }
+        it { is_expected.to eq presentation }
+      end
     end
 
     # Regression test for #2455
@@ -308,11 +358,9 @@ describe Spree::Product, :type => :model do
 
     context "when prototype with option types is supplied" do
       def build_option_type_with_values(name, values)
-        ot = create(:option_type, :name => name)
-        values.each do |val|
-          ot.option_values.create(:name => val.downcase, :presentation => val)
+        values.each_with_object(create :option_type, name: name) do |val, ot|
+          ot.option_values.create(name: val.downcase, presentation: val)
         end
-        ot
       end
 
       let(:prototype) do
@@ -438,5 +486,27 @@ describe Spree::Product, :type => :model do
   it "initializes a master variant when building a product" do
     product = Spree::Product.new
     expect(product.master.is_master).to be true
+  end
+
+  context "#discontinue!" do
+    let(:product) { create(:product, sku: 'a-sku') }
+
+    it "sets the discontinued" do
+      product.discontinue!
+      product.reload
+      expect(product.discontinued?).to be(true)
+    end
+  end
+
+  context "#discontinued?" do
+    let(:product_live) { build(:product, sku: "a-sku") }
+    it "should be false" do
+      expect(product_live.discontinued?).to be(false)
+    end
+
+    let(:product_discontinued) { build(:product, sku: "a-sku", discontinue_on: Time.now - 1.day)  }
+    it "should be true" do
+      expect(product_discontinued.discontinued?).to be(true)
+    end
   end
 end

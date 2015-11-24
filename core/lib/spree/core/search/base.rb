@@ -17,7 +17,8 @@ module Spree
           curr_page = page || 1
 
           unless Spree::Config.show_products_without_price
-            @products = @products.where("spree_prices.amount IS NOT NULL").where("spree_prices.currency" => current_currency)
+            @products = @products.where("spree_prices.amount IS NOT NULL").
+                                  where("spree_prices.currency" => current_currency)
           end
           @products = @products.page(curr_page).per(per_page)
         end
@@ -32,7 +33,7 @@ module Spree
 
         protected
           def get_base_scope
-            base_scope = Spree::Product.active
+            base_scope = Spree::Product.spree_base_scopes.active
             base_scope = base_scope.in_taxon(taxon) unless taxon.blank?
             base_scope = get_products_conditions_for(base_scope, keywords)
             base_scope = add_search_scopes(base_scope)
@@ -69,7 +70,7 @@ module Spree
               else
                 base_scope = base_scope.merge(Spree::Product.ransack({scope_name => scope_attribute}).result)
               end
-            end if search
+            end if search.is_a?(Hash)
             base_scope
           end
 
@@ -89,7 +90,11 @@ module Spree
 
             per_page = params[:per_page].to_i
             @properties[:per_page] = per_page > 0 ? per_page : Spree::Config[:products_per_page]
-            @properties[:page] = (params[:page].to_i <= 0) ? 1 : params[:page].to_i
+            if params[:page].respond_to?(:to_i)
+              @properties[:page] = (params[:page].to_i <= 0) ? 1 : params[:page].to_i
+            else
+              @properties[:page] = 1
+            end
           end
       end
     end

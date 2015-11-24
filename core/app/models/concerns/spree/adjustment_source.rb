@@ -14,7 +14,7 @@ module Spree
       return if amount == 0
       adjustments.new(order: order,
                       adjustable: adjustable,
-                      label: label(amount),
+                      label: label,
                       amount: amount,
                       included: included).save
     end
@@ -52,7 +52,7 @@ module Spree
       adjustment_scope.where("spree_orders.completed_at IS NOT NULL").each do |adjustment|
         adjustment.update_columns(
           source_id: nil,
-          updated_at: Time.now,
+          updated_at: Time.current,
         )
       end
     end

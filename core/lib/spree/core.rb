@@ -27,6 +27,9 @@ module Spree
     end
   end
 
+  mattr_accessor :admin_path
+  @@admin_path = "/admin"
+
   # Used to configure Spree.
   #
   # Example:
@@ -54,6 +57,7 @@ require 'spree/core/version'
 require 'spree/core/environment_extension'
 require 'spree/core/environment/calculators'
 require 'spree/core/environment'
+require 'spree/core/number_generator'
 require 'spree/promo/environment'
 require 'spree/migrations'
 require 'spree/core/engine'

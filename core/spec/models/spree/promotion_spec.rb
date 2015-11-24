@@ -130,7 +130,7 @@ describe Spree::Promotion, :type => :model do
 
     it "does activate if newer then order" do
       expect(@action1).to receive(:perform).with(@payload)
-      promotion.created_at = DateTime.now + 2
+      promotion.created_at = DateTime.current + 2
       expect(promotion.activate(@payload)).to be true
     end
 
@@ -178,28 +178,28 @@ describe Spree::Promotion, :type => :model do
     end
 
     it "should be expired if it hasn't started yet" do
-      promotion.starts_at = Time.now + 1.day
+      promotion.starts_at = Time.current + 1.day
       expect(promotion).to be_expired
     end
 
     it "should be expired if it has already ended" do
-      promotion.expires_at = Time.now - 1.day
+      promotion.expires_at = Time.current - 1.day
       expect(promotion).to be_expired
     end
 
     it "should not be expired if it has started already" do
-      promotion.starts_at = Time.now - 1.day
+      promotion.starts_at = Time.current - 1.day
       expect(promotion).not_to be_expired
     end
 
     it "should not be expired if it has not ended yet" do
-      promotion.expires_at = Time.now + 1.day
+      promotion.expires_at = Time.current + 1.day
       expect(promotion).not_to be_expired
     end
 
     it "should not be expired if current time is within starts_at and expires_at range" do
-      promotion.starts_at  = Time.now - 1.day
-      promotion.expires_at = Time.now + 1.day
+      promotion.starts_at  = Time.current - 1.day
+      promotion.expires_at = Time.current + 1.day
       expect(promotion).not_to be_expired
     end
 
@@ -250,6 +250,52 @@ describe Spree::Promotion, :type => :model do
     end
   end
 
+  context "#adjusted_credits_count" do
+    let(:order) { create :order }
+    let(:line_item) { create :line_item, order: order }
+    let(:promotion) { Spree::Promotion.create name: "promo", :code => "10off" }
+    let(:order_action) {
+      action = Spree::Promotion::Actions::CreateAdjustment.create(calculator: Spree::Calculator::FlatPercentItemTotal.new)
+      promotion.actions << action
+      action
+    }
+    let(:item_action) {
+      action = Spree::Promotion::Actions::CreateItemAdjustments.create(calculator: Spree::Calculator::FlatPercentItemTotal.new)
+      promotion.actions << action
+      action
+    }
+    let(:order_adjustment) do
+      Spree::Adjustment.create!(
+        :source => order_action,
+        :amount => 10,
+        :adjustable => order,
+        :order => order,
+        :label => "Promotional adjustment"
+      )
+    end
+    let(:item_adjustment) do
+      Spree::Adjustment.create!(
+        :source => item_action,
+        :amount => 10,
+        :adjustable => line_item,
+        :order => order,
+        :label => "Promotional adjustment"
+      )
+    end
+
+    it "counts order level adjustments" do
+      expect(order_adjustment.adjustable).to eq(order)
+      expect(promotion.credits_count).to eq(1)
+      expect(promotion.adjusted_credits_count(order)).to eq(0)
+    end
+
+    it "counts item level adjustments" do
+      expect(item_adjustment.adjustable).to eq(line_item)
+      expect(promotion.credits_count).to eq(1)
+      expect(promotion.adjusted_credits_count(order)).to eq(0)
+    end
+  end
+
   context "#products" do
     let(:promotion) { create(:promotion) }
 
@@ -278,7 +324,7 @@ describe Spree::Promotion, :type => :model do
     let(:promotable) { create :order }
     subject { promotion.eligible?(promotable) }
     context "when promotion is expired" do
-      before { promotion.expires_at = Time.now - 10.days }
+      before { promotion.expires_at = Time.current - 10.days }
       it { is_expected.to be false }
     end
     context "when promotable is a Spree::LineItem" do
@@ -496,7 +542,7 @@ describe Spree::Promotion, :type => :model do
       before do
         promotion.activate(order: order)
         order.update!
-        order.completed_at = Time.now
+        order.completed_at = Time.current
         order.save!
       end
 

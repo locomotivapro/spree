@@ -100,53 +100,55 @@ describe 'Payments', type: :feature, js: true do
       expect(page).to have_content('Please define some payment methods first.')
     end
 
-    context 'payment is pending', js: true do
-      let(:state) { 'pending' }
+    %w[checkout pending].each do |state|
+      context "payment is #{state.inspect}", js: true do
+        let(:state) { state }
 
-      it 'allows the amount to be edited by clicking on the edit button then saving' do
-        within_row(1) do
-          click_icon(:edit)
-          fill_in('amount', with: '$1')
-          click_icon(:save)
-          expect(page).to have_selector('td.amount span', text: '$1.00')
-          expect(payment.reload.amount).to eq(1.00)
+        it 'allows the amount to be edited by clicking on the edit button then saving' do
+          within_row(1) do
+            click_icon(:edit)
+            fill_in('amount', with: '$1')
+            click_icon(:save)
+            expect(page).to have_selector('td.amount span', text: '$1.00')
+            expect(payment.reload.amount).to eq(1.00)
+          end
         end
-      end
 
-      it 'allows the amount to be edited by clicking on the amount then saving' do
-        within_row(1) do
-          find('td.amount span').click
-          fill_in('amount', with: '$1.01')
-          click_icon(:save)
-          expect(page).to have_selector('td.amount span', text: '$1.01')
-          expect(payment.reload.amount).to eq(1.01)
+        it 'allows the amount to be edited by clicking on the amount then saving' do
+          within_row(1) do
+            find('td.amount span').click
+            fill_in('amount', with: '$1.01')
+            click_icon(:save)
+            expect(page).to have_selector('td.amount span', text: '$1.01')
+            expect(payment.reload.amount).to eq(1.01)
+          end
         end
-      end
 
-      it 'allows the amount change to be cancelled by clicking on the cancel button' do
-        within_row(1) do
-          click_icon(:edit)
+        it 'allows the amount change to be cancelled by clicking on the cancel button' do
+          within_row(1) do
+            click_icon(:edit)
 
-          # Can't use fill_in here, as under poltergeist that will unfocus (and
-          # thus submit) the field under poltergeist
-          find('td.amount input').click
-          page.execute_script("$('td.amount input').val('$1')")
+            # Can't use fill_in here, as under poltergeist that will unfocus (and
+            # thus submit) the field under poltergeist
+            find('td.amount input').click
+            page.execute_script("$('td.amount input').val('$1')")
 
-          click_icon(:cancel)
-          expect(page).to have_selector('td.amount span', text: '$150.00')
-          expect(payment.reload.amount).to eq(150.00)
+            click_icon(:cancel)
+            expect(page).to have_selector('td.amount span', text: '$150.00')
+            expect(payment.reload.amount).to eq(150.00)
+          end
         end
-      end
 
-      it 'displays an error when the amount is invalid' do
-        within_row(1) do
-          click_icon(:edit)
-          fill_in('amount', with: 'invalid')
-          click_icon(:save)
-          expect(find('td.amount input').value).to eq('invalid')
-          expect(payment.reload.amount).to eq(150.00)
+        it 'displays an error when the amount is invalid' do
+          within_row(1) do
+            click_icon(:edit)
+            fill_in('amount', with: 'invalid')
+            click_icon(:save)
+            expect(find('td.amount input').value).to eq('invalid')
+            expect(payment.reload.amount).to eq(150.00)
+          end
+          expect(page).to have_selector('.alert-error', text: 'Invalid resource. Please fix errors and try again.')
         end
-        expect(page).to have_selector('.alert-error', text: 'Invalid resource. Please fix errors and try again.')
       end
     end
 
@@ -175,7 +177,7 @@ describe 'Payments', type: :feature, js: true do
       it "is able to create a new credit card payment with valid information" do
         fill_in "Card Number", with: "4111 1111 1111 1111"
         fill_in "Name", with: "Test User"
-        fill_in "Expiration", with: "09 / #{Time.now.year + 1}"
+        fill_in "Expiration", with: "09 / #{Time.current.year + 1}"
         fill_in "Card Code", with: "007"
         # Regression test for #4277
         sleep(1)

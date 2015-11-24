@@ -121,13 +121,12 @@ describe Spree::Admin::OrdersController, type: :controller do
       let(:closed) { double('closed_adjustments') }
 
       before do
-        allow(adjustments).to receive(:where).and_return(closed)
+        allow(adjustments).to receive(:closed).and_return(closed)
         allow(closed).to receive(:update_all)
       end
 
       it "changes all the closed adjustments to open" do
-        expect(adjustments).to receive(:where).with(state: 'closed')
-          .and_return(closed)
+        expect(adjustments).to receive(:closed).and_return(closed)
         expect(closed).to receive(:update_all).with(state: 'open')
         spree_post :open_adjustments, id: order.number
       end
@@ -147,13 +146,12 @@ describe Spree::Admin::OrdersController, type: :controller do
       let(:open) { double('open_adjustments') }
 
       before do
-        allow(adjustments).to receive(:where).and_return(open)
+        allow(adjustments).to receive(:open).and_return(open)
         allow(open).to receive(:update_all)
       end
 
       it "changes all the open adjustments to closed" do
-        expect(adjustments).to receive(:where).with(state: 'open')
-          .and_return(open)
+        expect(adjustments).to receive(:open).and_return(open)
         expect(open).to receive(:update_all).with(state: 'closed')
         spree_post :close_adjustments, id: order.number
       end
@@ -174,6 +172,13 @@ describe Spree::Admin::OrdersController, type: :controller do
     let(:user) { create(:user) }
     let(:order) { create(:completed_order_with_totals, number: 'R987654321') }
 
+    def with_ability(ability)
+      Spree::Ability.register_ability(ability)
+      yield
+    ensure
+      Spree::Ability.remove_ability(ability)
+    end
+
     before do
       allow(Spree::Order).to receive_messages find: order
       allow(controller).to receive_messages spree_current_user: user
@@ -186,23 +191,23 @@ describe Spree::Admin::OrdersController, type: :controller do
     end
 
     it 'should grant access to users with an bar role' do
-      user.spree_roles << Spree::Role.find_or_create_by(name: 'bar')
-      Spree::Ability.register_ability(BarAbility)
-      spree_post :index
-      expect(response).to render_template :index
-      Spree::Ability.remove_ability(BarAbility)
+      with_ability(BarAbility) do
+        user.spree_roles << Spree::Role.find_or_create_by(name: 'bar')
+        spree_post :index
+        expect(response).to render_template :index
+      end
     end
 
     it 'should deny access to users with an bar role' do
-      allow(order).to receive(:update_attributes).and_return true
-      allow(order).to receive(:user).and_return Spree.user_class.new
-      allow(order).to receive(:token).and_return nil
-      user.spree_roles.clear
-      user.spree_roles << Spree::Role.find_or_create_by(name: 'bar')
-      Spree::Ability.register_ability(BarAbility)
-      spree_put :update, id: order.number
-      expect(response).to redirect_to('/unauthorized')
-      Spree::Ability.remove_ability(BarAbility)
+      with_ability(BarAbility) do
+        allow(order).to receive(:update_attributes).and_return true
+        allow(order).to receive(:user).and_return Spree.user_class.new
+        allow(order).to receive(:token).and_return nil
+        user.spree_roles.clear
+        user.spree_roles << Spree::Role.find_or_create_by(name: 'bar')
+        spree_put :update, id: order.number
+        expect(response).to redirect_to('/unauthorized')
+      end
     end
 
     it 'should deny access to users without an admin role' do
@@ -216,14 +221,15 @@ describe Spree::Admin::OrdersController, type: :controller do
 
       3.times { create(:completed_order_with_totals) }
       expect(Spree::Order.complete.count).to eq 4
-      Spree::Ability.register_ability(OrderSpecificAbility)
 
-      allow(user).to receive_messages has_spree_role?: false
-      spree_get :index
-      expect(response).to render_template :index
-      expect(assigns['orders'].size).to eq 1
-      expect(assigns['orders'].first.number).to eq number
-      expect(Spree::Order.accessible_by(Spree::Ability.new(user), :index).pluck(:number)).to eq  [number]
+      with_ability(OrderSpecificAbility) do
+        allow(user).to receive_messages has_spree_role?: false
+        spree_get :index
+        expect(response).to render_template :index
+        expect(assigns['orders'].size).to eq 1
+        expect(assigns['orders'].first.number).to eq number
+        expect(Spree::Order.accessible_by(Spree::Ability.new(user), :index).pluck(:number)).to eq  [number]
+      end
     end
   end
 
